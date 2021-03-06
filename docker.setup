@@ -1,0 +1,64 @@
+#!/bin/bash
+# nikola.ilic <icrunchbanger@gmail.com>
+
+
+# Privileges check
+sudo true
+
+# Install packages
+YUM_CMD=$(which yum 2>&1)
+APT_CMD=$(which apt 2>&1)
+APT_GET_CMD=$(which apt-get 2>&1)
+PACKAGES="git curl dialog"
+
+if [[ ! -z $YUM_CMD ]]; then
+   sudo yum -y install $PACKAGES
+ elif [[ ! -z $APT_CMD ]]; then
+   sudo apt -y update &> /dev/null
+   sudo apt -y install $PACKAGES
+ elif [[ ! -z $APT_GET_CMD ]]; then
+   sudo apt-get -y update &> /dev/null
+   sudo apt-get -y install $PACKAGES
+ else
+    echo "error can't install package $PACKAGE"
+    exit 1;
+ fi
+
+set -uo pipefail
+trap 's=$?; echo "$0: Error on line "$LINENO": $BASH_COMMAND"; exit $s' ERR
+IFS=$'\n\t'
+
+# Create folders
+mkdir -pv $HOME/.local/bin/
+mkdir -pv $HOME/.local/share/bash-completion/completions
+
+# Install docker
+curl -o- https://get.docker.com | bash
+
+# Install docker-compose
+COMPOSE_VERSION=`git ls-remote https://github.com/docker/compose | grep refs/tags | grep -oE "[0-9]+\.[0-9][0-9]+\.[0-9]+$" | sort --version-sort | tail -n 1`
+sh -c "curl -L https://github.com/docker/compose/releases/download/${COMPOSE_VERSION}/docker-compose-`uname -s`-`uname -m` > $HOME/.local/bin/docker-compose"
+sh -c "curl -L https://raw.githubusercontent.com/docker/compose/${COMPOSE_VERSION}/contrib/completion/bash/docker-compose > $HOME/.local/share/bash-completion/completions/docker-compose"
+
+# Install ctop (Top-like interface for container metrics)
+CTOP_VERSION=`git ls-remote --tags "https://github.com/bcicen/ctop" | awk '{print $2}' | grep -v '{}' | awk -F"/" '{print $3}' | sort -n -t. -k1,1 -k2,2 -k3,3 | tail -n 1`
+DL_CTOP_VERSION=${CTOP_VERSION#?};
+sh -c "curl -L https://github.com/bcicen/ctop/releases/download/${CTOP_VERSION}/ctop-${DL_CTOP_VERSION}-linux-amd64 > $HOME/.local/bin/docker-ctop"
+
+# Install docker-cleanup command
+sh -c "curl -L https://gist.githubusercontent.com/wdullaer/76b450a0c986e576e98b/raw/4753eee44c81eb70fe58d9e2a56341587ac63e30/docker-cleanup > $HOME/.local/bin/docker-cleanup"
+
+# Install docker-purge command
+sh -c "curl -L https://gitlab.com/syncit-group-open-source/devops/docker-setup/-/raw/master/bin/docker-purge > $HOME/.local/bin/docker-purge"
+
+# Make scripts executable
+chmod +x $HOME/.local/bin/docker*
+
+# User & Group setup
+getent group docker || sudo groupadd docker
+sudo usermod -aG docker $USER
+
+# Start docker and Enable at boot
+sudo systemctl enable --now docker
+
+exit 0
